@@ -163,6 +163,92 @@ app.post('/api/camera/ip', async (req, res) => {
   }
 });
 
+// Debug endpoints for Vercel connectivity testing
+app.get('/api/debug/status', (req, res) => {
+  console.log('[DEBUG] Status check from:', req.ip);
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    environment: {
+      CAM_USER: CAM_USER || 'not set',
+      ROBOT_CAM_IP: ROBOT_CAM_IP || 'not set',
+      TABLE_CAM_IP: TABLE_CAM_IP || 'not set', 
+      CEILING_CAM_IP: CEILING_CAM_IP || 'not set',
+      MEDIAMTX_HTTP: MEDIAMTX_HTTP || 'not set',
+      MEDIAMTX_WHEP: MEDIAMTX_WHEP || 'not set'
+    },
+    server: {
+      uptime: process.uptime(),
+      platform: process.platform,
+      nodeVersion: process.version
+    }
+  });
+});
+
+app.get('/api/debug/camera-test/:camera', async (req, res) => {
+  const camera = req.params.camera;
+  console.log(`[DEBUG] Testing ${camera} camera connectivity from:`, req.ip);
+  
+  const ip = (camera === 'table') ? TABLE_CAM_IP : 
+             (camera === 'ceiling') ? CEILING_CAM_IP : ROBOT_CAM_IP;
+  
+  if (!ip) {
+    return res.status(400).json({ error: `${camera} camera IP not configured` });
+  }
+  
+  try {
+    // Test PTZ command
+    const result = await sendPTZCommand(ip, { action: 'start', channel: 1, code: 'Up', arg1: 0, arg2: 0, arg3: 0 });
+    console.log(`[DEBUG] ${camera} camera test result:`, result);
+    
+    res.json({
+      camera,
+      ip,
+      connectivity: result.ok ? 'success' : 'failed',
+      result: result
+    });
+  } catch (error) {
+    console.log(`[DEBUG] ${camera} camera test error:`, error.message);
+    res.status(500).json({
+      camera,
+      ip,
+      connectivity: 'error',
+      error: error.message
+    });
+  }
+});
+
+app.get('/api/debug/mediamtx-test', async (req, res) => {
+  console.log('[DEBUG] Testing MediaMTX connectivity from:', req.ip);
+  
+  try {
+    const response = await fetch(`${MEDIAMTX_HTTP}/`);
+    const status = response.status;
+    const text = await response.text();
+    
+    console.log(`[DEBUG] MediaMTX test - Status: ${status}`);
+    
+    res.json({
+      mediamtx: {
+        http: MEDIAMTX_HTTP,
+        whep: MEDIAMTX_WHEP,
+        status: status,
+        reachable: status < 500
+      }
+    });
+  } catch (error) {
+    console.log(`[DEBUG] MediaMTX test error:`, error.message);
+    res.status(500).json({
+      error: error.message,
+      mediamtx: {
+        http: MEDIAMTX_HTTP,
+        whep: MEDIAMTX_WHEP,
+        reachable: false
+      }
+    });
+  }
+});
+
 // Proxy WHEP and HLS to local MediaMTX for dev
 // POST /whep?path=robot → forward to MediaMTX
 app.post('/whep', async (req, res) => {
