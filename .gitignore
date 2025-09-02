@@ -1,0 +1,52 @@
+# OS / Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Env files (keep examples)
+.env
+.env.*
+!env.example
+**/.env
+**/.env.*
+!**/env.example
+
+# Package managers logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Dependencies
+**/node_modules/
+
+# Build artifacts / caches
+dist/
+build/
+out/
+.next/
+.nuxt/
+.svelte-kit/
+.output/
+.turbo/
+.cache/
+.parcel-cache/
+.eslintcache
+coverage/
+.nyc_output/
+.vercel/
+
+# MediaMTX downloads/cache
+**/.mtx/
+
+# Certificates/keys (allow explicit placeholders)
+*.pem
+*.key
+*.crt
+cam-web/nginx/certs/**
+!cam-web/nginx/certs/.gitkeep
+
+

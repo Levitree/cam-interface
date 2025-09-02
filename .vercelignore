@@ -1,0 +1,37 @@
+# Ignore heavy/unneeded files for Vercel upload
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Env files
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Dependencies
+**/node_modules/
+
+# Build artifacts / caches
+.dist/
+dist/
+build/
+out/
+.next/
+.nuxt/
+.svelte-kit/
+.output/
+.turbo/
+.cache/
+.parcel-cache/
+.eslintcache
+coverage/
+.nyc_output/
+.vercel/
+
+# MediaMTX
+**/.mtx/
+
+# Local certs
+cam-web/nginx/certs/

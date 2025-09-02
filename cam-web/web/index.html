@@ -1,0 +1,51 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Live</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style> body{margin:0;padding:0;background:#000} video{width:100vw;height:100vh;object-fit:contain;background:#000}</style>
+  <script>
+    // Allow HTTP for local dev (proxied by Express)
+  </script>
+  <script>
+    async function playWHEP(videoEl, whepUrl){
+      const pc = new RTCPeerConnection({ iceServers: [] });
+      pc.addTransceiver('video', { direction: 'recvonly' });
+      pc.ontrack = e => { if (!videoEl.srcObject) videoEl.srcObject = e.streams[0]; };
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      // Try both common endpoint styles
+      const urls = [
+        whepUrl,
+        whepUrl.replace('/whep?path=', '/whep/'),
+        `${location.protocol}//${location.host}/robot/whep`,
+        `${location.protocol}//${location.hostname}:8889/robot/whep`,
+      ];
+      let ok = false;
+      for (const url of urls){
+        console.log('WHEP POST', url);
+        const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/sdp'}, body: offer.sdp });
+        console.log('WHEP status', r.status);
+        if (r.ok) {
+          const answer = await r.text();
+          await pc.setRemoteDescription({ type: 'answer', sdp: answer });
+          ok = true; break;
+        }
+      }
+      if (!ok) { console.error('WHEP POST failed (404/err)'); return; }
+      return pc;
+    }
+    // If hosting frontend elsewhere (e.g., Vercel), set window.PUBLIC_HOST = 'streams.yourdomain.com'
+    const HOST = (window.PUBLIC_HOST && window.PUBLIC_HOST.length) ? window.PUBLIC_HOST : location.host;
+    window.addEventListener('DOMContentLoaded', () => {
+      const base = `${location.protocol}//${HOST}`;
+      playWHEP(document.getElementById('vRobot'), `${base}/robot/whep`);
+    });
+  </script>
+</head>
+<body>
+  <video id="vRobot" autoplay playsinline muted style="width:100%; background:#000; border-radius:12px"></video>
+</body>
+</html>
+

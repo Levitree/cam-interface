@@ -1,0 +1,7 @@
+paths:
+  robot:
+    source: rtsp://admin:Password@192.168.4.181:554/cam/realmonitor?channel=1&subtype=0
+
+webrtc: yes
+hls: yes
+
