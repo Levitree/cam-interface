@@ -11,7 +11,6 @@ app.use(compression());
 app.use(express.json());
 // Accept raw SDP for WHEP endpoints
 app.use('/whep', express.text({ type: 'application/sdp' }));
-app.use('/robot/whep', express.text({ type: 'application/sdp' }));
 
 const CAM_USER = process.env.CAM_USER;
 const CAM_PASS = process.env.CAM_PASS;
@@ -20,12 +19,7 @@ const TABLE_CAM_IP = process.env.TABLE_CAM_IP;
 const MEDIAMTX_HTTP = process.env.MEDIAMTX_HTTP || 'http://127.0.0.1:8888';
 const MEDIAMTX_WHEP = process.env.MEDIAMTX_WHEP || 'http://127.0.0.1:8889';
 
-function ptzUrl(ip, params) {
-  const qs = new URLSearchParams(params).toString();
-  return `http://${CAM_USER}:${CAM_PASS}@${ip}/cgi-bin/ptz.cgi?${qs}`;
-}
-
-// PTZ action mapping
+// PTZ action mapping for new UI
 const PTZ_ACTIONS = {
   'up': 'Up',
   'down': 'Down', 
@@ -40,79 +34,40 @@ const PTZ_ACTIONS = {
   'stop': 'Stop'
 };
 
+function ptzUrl(ip, params) {
+  const qs = new URLSearchParams(params).toString();
+  return `http://${CAM_USER}:${CAM_PASS}@${ip}/cgi-bin/ptz.cgi?${qs}`;
+}
+
 app.post('/api/ptz/start', async (req, res) => {
-  const { camera = 'robot', action, speed = 4 } = { ...req.body, ...req.query };
-  const ip = camera === 'table' ? TABLE_CAM_IP : ROBOT_CAM_IP;
+  // Support both old body format and new query format
+  const { camera = 'robot', cam = camera, action, code = action ? PTZ_ACTIONS[action] : undefined, speed = 4 } = { ...req.body, ...req.query };
+  const ip = (cam === 'table' || camera === 'table') ? TABLE_CAM_IP : ROBOT_CAM_IP;
+  const finalCode = code || PTZ_ACTIONS[action];
   
-  if (!ip) {
-    return res.status(400).json({ error: 'Camera IP not configured' });
-  }
-  
-  const code = PTZ_ACTIONS[action];
-  if (!code) {
+  if (!finalCode) {
     return res.status(400).json({ error: `Unknown action: ${action}` });
   }
   
-  console.log(`[PTZ] ${camera} start ${action} (${code})`);
-  const url = ptzUrl(ip, { action: 'start', channel: 1, code, arg1: 0, arg2: speed, arg3: 0 });
-  
-  try {
-    const r = await fetch(url);
-    const result = await r.text();
-    console.log(`[PTZ] Response: ${r.status} ${result}`);
-    res.json({ ok: r.ok, status: r.status, result });
-  } catch (error) {
-    console.error(`[PTZ] Error:`, error.message);
-    res.status(500).json({ error: error.message });
-  }
+  const url = ptzUrl(ip, { action: 'start', channel: 1, code: finalCode, arg1: 0, arg2: speed, arg3: 0 });
+  const r = await fetch(url).catch(()=>({ok:false}));
+  res.json({ ok: r.ok });
 });
 
 app.post('/api/ptz/stop', async (req, res) => {
-  const { camera = 'robot', action = 'stop' } = { ...req.body, ...req.query };
-  const ip = camera === 'table' ? TABLE_CAM_IP : ROBOT_CAM_IP;
-  
-  if (!ip) {
-    return res.status(400).json({ error: 'Camera IP not configured' });
-  }
-  
-  console.log(`[PTZ] ${camera} stop`);
+  const { camera = 'robot', cam = camera } = { ...req.body, ...req.query };
+  const ip = (cam === 'table' || camera === 'table') ? TABLE_CAM_IP : ROBOT_CAM_IP;
   const url = ptzUrl(ip, { action: 'stop', channel: 1, code: 'Stop', arg1: 0, arg2: 0, arg3: 0 });
-  
-  try {
-    const r = await fetch(url);
-    const result = await r.text();
-    console.log(`[PTZ] Stop response: ${r.status} ${result}`);
-    res.json({ ok: r.ok, status: r.status, result });
-  } catch (error) {
-    console.error(`[PTZ] Stop error:`, error.message);
-    res.status(500).json({ error: error.message });
-  }
+  const r = await fetch(url).catch(()=>({ok:false}));
+  res.json({ ok: r.ok });
 });
 
 app.post('/api/ptz/preset', async (req, res) => {
-  const { camera = 'robot', preset } = { ...req.body, ...req.query };
-  const ip = camera === 'table' ? TABLE_CAM_IP : ROBOT_CAM_IP;
-  
-  if (!ip) {
-    return res.status(400).json({ error: 'Camera IP not configured' });
-  }
-  
-  if (!preset || isNaN(preset)) {
-    return res.status(400).json({ error: 'Invalid preset number' });
-  }
-  
-  console.log(`[PTZ] ${camera} goto preset ${preset}`);
-  const url = ptzUrl(ip, { action: 'start', channel: 1, code: 'GotoPreset', arg1: 0, arg2: preset, arg3: 0 });
-  
-  try {
-    const r = await fetch(url);
-    const result = await r.text();
-    console.log(`[PTZ] Preset response: ${r.status} ${result}`);
-    res.json({ ok: r.ok, status: r.status, result });
-  } catch (error) {
-    console.error(`[PTZ] Preset error:`, error.message);
-    res.status(500).json({ error: error.message });
-  }
+  const { camera = 'robot', cam = camera, preset, id = preset } = { ...req.body, ...req.query };
+  const ip = (cam === 'table' || camera === 'table') ? TABLE_CAM_IP : ROBOT_CAM_IP;
+  const url = ptzUrl(ip, { action: 'start', channel: 1, code: 'GotoPreset', arg1: 0, arg2: id, arg3: 0 });
+  const r = await fetch(url).catch(()=>({ok:false}));
+  res.json({ ok: r.ok });
 });
 
 // Proxy WHEP and HLS to local MediaMTX for dev
@@ -159,33 +114,24 @@ app.post('/whep/:name', async (req, res) => {
     res.status(502).send('bad gateway');
   }
 });
-// POST /robot/whep → forward to MediaMTX
+// Simple /robot/whep route that forwards to MediaMTX
+app.use('/robot/whep', express.text({ type: 'application/sdp' }));
 app.post('/robot/whep', async (req, res) => {
-  console.log('[WHEP] /robot/whep route hit!', typeof req.body, req.body?.length);
   try {
     const target = `${MEDIAMTX_WHEP}/robot/whep`;
-    console.log(`[WHEP] Forwarding to ${target}`);
-
     const response = await fetch(target, {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/sdp',
-        'Content-Length': req.body ? Buffer.byteLength(req.body, 'utf8') : '0'
-      },
+      headers: { 'Content-Type': 'application/sdp' },
       body: req.body || ''
     });
-    
     const result = await response.text();
-    console.log(`[WHEP] Response: ${response.status}, ${result.length} bytes`);
-    
     res.status(response.status);
     if (response.headers.get('content-type')) {
       res.set('Content-Type', response.headers.get('content-type'));
     }
     res.send(result);
   } catch (error) {
-    console.error('[WHEP] Error:', error.message);
-    res.status(502).json({ error: 'WHEP proxy error' });
+    res.status(502).send('bad gateway');
   }
 });
 
