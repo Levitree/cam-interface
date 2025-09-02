@@ -29,9 +29,7 @@
       "dest": "/cam-web/web/index.html"
     }
   ],
-  "env": {
-    "NODE_ENV": "production"
-  },
+
   "functions": {
     "cam-web/ptz-proxy/server.js": {
       "maxDuration": 30
