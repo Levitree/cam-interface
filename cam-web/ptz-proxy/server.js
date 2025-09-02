@@ -20,30 +20,55 @@ const TABLE_CAM_IP = process.env.TABLE_CAM_IP;
 const MEDIAMTX_HTTP = process.env.MEDIAMTX_HTTP || 'http://127.0.0.1:8888';
 const MEDIAMTX_WHEP = process.env.MEDIAMTX_WHEP || 'http://127.0.0.1:8889';
 
+// PTZ action mapping for UI controls
+const PTZ_ACTIONS = {
+  'up': 'Up',
+  'down': 'Down', 
+  'left': 'Left',
+  'right': 'Right',
+  'up-left': 'LeftUp',
+  'up-right': 'RightUp',
+  'down-left': 'LeftDown',
+  'down-right': 'RightDown',
+  'zoom-in': 'ZoomTele',
+  'zoom-out': 'ZoomWide',
+  'stop': 'Stop'
+};
+
 function ptzUrl(ip, params) {
   const qs = new URLSearchParams(params).toString();
   return `http://${CAM_USER}:${CAM_PASS}@${ip}/cgi-bin/ptz.cgi?${qs}`;
 }
 
 app.post('/api/ptz/start', async (req, res) => {
-  const { cam = 'robot', code, speed = 4 } = req.body;
-  const ip = cam === 'table' ? TABLE_CAM_IP : ROBOT_CAM_IP;
-  const url = ptzUrl(ip, { action: 'start', channel: 1, code, arg1: 0, arg2: speed, arg3: 0 });
+  // Support both original body format and new query format
+  const { camera = 'robot', cam = camera, action, code = action ? PTZ_ACTIONS[action] : undefined, speed = 4 } = { ...req.body, ...req.query };
+  const ip = (cam === 'table' || camera === 'table') ? TABLE_CAM_IP : ROBOT_CAM_IP;
+  const finalCode = code || PTZ_ACTIONS[action];
+  
+  if (!finalCode) {
+    return res.status(400).json({ error: `Unknown action: ${action}` });
+  }
+  
+  console.log(`[PTZ] ${camera} start ${action || 'custom'} (${finalCode})`);
+  const url = ptzUrl(ip, { action: 'start', channel: 1, code: finalCode, arg1: 0, arg2: speed, arg3: 0 });
   const r = await fetch(url).catch(()=>({ok:false}));
   res.json({ ok: r.ok });
 });
 
 app.post('/api/ptz/stop', async (req, res) => {
-  const { cam = 'robot', code } = req.body;
-  const ip = cam === 'table' ? TABLE_CAM_IP : ROBOT_CAM_IP;
-  const url = ptzUrl(ip, { action: 'stop', channel: 1, code, arg1: 0, arg2: 0, arg3: 0 });
+  const { camera = 'robot', cam = camera } = { ...req.body, ...req.query };
+  const ip = (cam === 'table' || camera === 'table') ? TABLE_CAM_IP : ROBOT_CAM_IP;
+  console.log(`[PTZ] ${camera} stop`);
+  const url = ptzUrl(ip, { action: 'stop', channel: 1, code: 'Stop', arg1: 0, arg2: 0, arg3: 0 });
   const r = await fetch(url).catch(()=>({ok:false}));
   res.json({ ok: r.ok });
 });
 
 app.post('/api/ptz/preset', async (req, res) => {
-  const { cam = 'robot', id } = req.body;
-  const ip = cam === 'table' ? TABLE_CAM_IP : ROBOT_CAM_IP;
+  const { camera = 'robot', cam = camera, preset, id = preset } = { ...req.body, ...req.query };
+  const ip = (cam === 'table' || camera === 'table') ? TABLE_CAM_IP : ROBOT_CAM_IP;
+  console.log(`[PTZ] ${camera} goto preset ${id}`);
   const url = ptzUrl(ip, { action: 'start', channel: 1, code: 'GotoPreset', arg1: 0, arg2: id, arg3: 0 });
   const r = await fetch(url).catch(()=>({ok:false}));
   res.json({ ok: r.ok });
