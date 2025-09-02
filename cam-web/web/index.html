@@ -196,6 +196,40 @@
       background: #444;
     }
     
+    .reload-btn {
+      position: absolute;
+      top: 6px;
+      right: 60px;
+      background: rgba(0, 0, 0, 0.8);
+      border: 1px solid #555;
+      color: #fff;
+      padding: 3px 6px;
+      border-radius: 3px;
+      font-size: 10px;
+      cursor: pointer;
+      user-select: none;
+    }
+    
+    .reload-btn:hover {
+      background: rgba(0, 0, 0, 0.9);
+      border-color: #777;
+    }
+    
+    .no-stream {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #888;
+      font-size: 14px;
+      text-align: center;
+      pointer-events: none;
+    }
+    
+    video.hidden {
+      display: none;
+    }
+    
     @media (max-width: 1024px) {
       .cameras-container {
         grid-template-columns: 1fr;
@@ -235,31 +269,56 @@
     // WebRTC WHEP connection
     async function playWHEP(videoEl, whepUrl, cameraName) {
       console.log(`Starting WHEP connection for ${cameraName}:`, whepUrl);
-      const pc = new RTCPeerConnection({ iceServers: [] });
-      pc.addTransceiver('video', { direction: 'recvonly' });
-      pc.ontrack = e => { 
-        console.log(`Video track received for ${cameraName}`);
-        if (!videoEl.srcObject) videoEl.srcObject = e.streams[0]; 
-      };
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
+      updateStatus(cameraName, 'Connecting...', '');
       
-      const response = await fetch(whepUrl, { 
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/sdp' }, 
-        body: offer.sdp 
-      });
-      
-      console.log(`WHEP response for ${cameraName}:`, response.status);
-      if (!response.ok) {
-        console.error(`WHEP failed for ${cameraName}:`, response.status, await response.text());
-        return;
+      try {
+        const pc = new RTCPeerConnection({ iceServers: [] });
+        pc.addTransceiver('video', { direction: 'recvonly' });
+        
+        pc.ontrack = e => { 
+          console.log(`Video track received for ${cameraName}`);
+          if (!videoEl.srcObject) {
+            videoEl.srcObject = e.streams[0];
+            videoEl.classList.remove('hidden');
+            hideNoStream(cameraName);
+            updateStatus(cameraName, 'Connected', 'connected');
+          }
+        };
+        
+        pc.onconnectionstatechange = () => {
+          console.log(`${cameraName} connection state:`, pc.connectionState);
+          if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+            showNoStream(cameraName);
+            updateStatus(cameraName, 'Connection Failed', 'error');
+          }
+        };
+        
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        
+        const response = await fetch(whepUrl, { 
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/sdp' }, 
+          body: offer.sdp 
+        });
+        
+        console.log(`WHEP response for ${cameraName}:`, response.status);
+        if (!response.ok) {
+          console.error(`WHEP failed for ${cameraName}:`, response.status, await response.text());
+          showNoStream(cameraName);
+          updateStatus(cameraName, 'Connection Failed', 'error');
+          return;
+        }
+        
+        const answer = await response.text();
+        await pc.setRemoteDescription({ type: 'answer', sdp: answer });
+        console.log(`WHEP connection established for ${cameraName}`);
+        return pc;
+      } catch (error) {
+        console.error(`WHEP error for ${cameraName}:`, error);
+        showNoStream(cameraName);
+        updateStatus(cameraName, 'Connection Failed', 'error');
       }
-      
-      const answer = await response.text();
-      await pc.setRemoteDescription({ type: 'answer', sdp: answer });
-      console.log(`WHEP connection established for ${cameraName}`);
-      return pc;
     }
     
     // Camera IP configuration
@@ -355,6 +414,44 @@
       }
     }
     
+    function showNoStream(camera) {
+      const video = document.getElementById(`v${camera.charAt(0).toUpperCase() + camera.slice(1)}`);
+      const noStream = document.getElementById(`no-stream-${camera}`);
+      if (video) video.classList.add('hidden');
+      if (noStream) noStream.style.display = 'block';
+    }
+    
+    function hideNoStream(camera) {
+      const noStream = document.getElementById(`no-stream-${camera}`);
+      if (noStream) noStream.style.display = 'none';
+    }
+    
+    function reloadCamera(camera) {
+      console.log(`Reloading ${camera} camera...`);
+      updateStatus(camera, 'Reloading...', '');
+      
+      // Stop existing stream
+      const video = document.getElementById(`v${camera.charAt(0).toUpperCase() + camera.slice(1)}`);
+      if (video && video.srcObject) {
+        video.srcObject.getTracks().forEach(track => track.stop());
+        video.srcObject = null;
+      }
+      
+      showNoStream(camera);
+      
+      // Restart stream
+      setTimeout(() => {
+        const HOST = (window.PUBLIC_HOST && window.PUBLIC_HOST.length) ? window.PUBLIC_HOST : location.host;
+        const base = `${location.protocol}//${HOST}`;
+        
+        playWHEP(video, `${base}/${camera}/whep`, camera).then(() => {
+          // Success handled in playWHEP
+        }).catch(() => {
+          updateStatus(camera, 'Reload Failed', 'error');
+        });
+      }, 1000);
+    }
+    
     // Event handlers for a specific camera
     function setupCameraControls(camera) {
       document.querySelectorAll(`[data-camera="${camera}"] .ptz-btn`).forEach(btn => {
@@ -423,22 +520,21 @@
     window.addEventListener('DOMContentLoaded', () => {
       const base = `${location.protocol}//${HOST}`;
       
+      // Show no-stream initially for all cameras
+      showNoStream('robot');
+      showNoStream('table');
+      showNoStream('ceiling');
+      
       // Start all three video streams
-      playWHEP(document.getElementById('vRobot'), `${base}/robot/whep`, 'robot').then(() => {
-        updateStatus('robot', 'Connected', 'connected');
-      }).catch(() => {
+      playWHEP(document.getElementById('vRobot'), `${base}/robot/whep`, 'robot').catch(() => {
         updateStatus('robot', 'Connection Failed', 'error');
       });
       
-      playWHEP(document.getElementById('vTable'), `${base}/table/whep`, 'table').then(() => {
-        updateStatus('table', 'Connected', 'connected');
-      }).catch(() => {
+      playWHEP(document.getElementById('vTable'), `${base}/table/whep`, 'table').catch(() => {
         updateStatus('table', 'Connection Failed', 'error');
       });
       
-      playWHEP(document.getElementById('vCeiling'), `${base}/ceiling/whep`, 'ceiling').then(() => {
-        updateStatus('ceiling', 'Connected', 'connected');
-      }).catch(() => {
+      playWHEP(document.getElementById('vCeiling'), `${base}/ceiling/whep`, 'ceiling').catch(() => {
         updateStatus('ceiling', 'Connection Failed', 'error');
       });
       
@@ -463,7 +559,9 @@
       <div class="camera-header">Robot Camera</div>
       <div class="video-container">
         <video id="vRobot" autoplay playsinline muted></video>
+        <div id="no-stream-robot" class="no-stream" style="display: none;">No Stream</div>
         <div id="status-robot" class="status">Connecting...</div>
+        <div class="reload-btn" onclick="reloadCamera('robot')">🔄</div>
         <div class="settings-btn" onclick="toggleSettings('robot')">⋯</div>
         <div id="settings-menu-robot" class="settings-menu">
           <div class="setting-item">
@@ -496,7 +594,9 @@
       <div class="camera-header">Table Camera</div>
       <div class="video-container">
         <video id="vTable" autoplay playsinline muted></video>
+        <div id="no-stream-table" class="no-stream" style="display: none;">No Stream</div>
         <div id="status-table" class="status">Connecting...</div>
+        <div class="reload-btn" onclick="reloadCamera('table')">🔄</div>
         <div class="settings-btn" onclick="toggleSettings('table')">⋯</div>
         <div id="settings-menu-table" class="settings-menu">
           <div class="setting-item">
@@ -529,7 +629,9 @@
       <div class="camera-header">Ceiling Camera</div>
       <div class="video-container">
         <video id="vCeiling" autoplay playsinline muted></video>
+        <div id="no-stream-ceiling" class="no-stream" style="display: none;">No Stream</div>
         <div id="status-ceiling" class="status">Connecting...</div>
+        <div class="reload-btn" onclick="reloadCamera('ceiling')">🔄</div>
         <div class="settings-btn" onclick="toggleSettings('ceiling')">⋯</div>
         <div id="settings-menu-ceiling" class="settings-menu">
           <div class="setting-item">
