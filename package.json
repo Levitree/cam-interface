@@ -1,0 +1,31 @@
+{
+  "name": "cam-interface",
+  "version": "1.0.0",
+  "description": "Multi-camera PTZ control interface with WebRTC streaming",
+  "main": "cam-web/ptz-proxy/server.js",
+  "type": "module",
+  "scripts": {
+    "build": "echo 'No build step required'",
+    "start": "node cam-web/ptz-proxy/server.js",
+    "dev": "cd cam-web/ptz-proxy && npm run dev"
+  },
+  "dependencies": {
+    "compression": "^1.7.4",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "http-proxy-middleware": "^2.0.6",
+    "node-fetch": "^3.3.2",
+    "concurrently": "^8.2.2",
+    "digest-fetch": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Levitree/cam-interface.git"
+  },
+  "keywords": ["camera", "ptz", "webrtc", "streaming", "surveillance"],
+  "author": "",
+  "license": "MIT"
+}

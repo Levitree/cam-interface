@@ -1,0 +1,40 @@
+{
+  "version": 2,
+  "name": "cam-interface",
+  "builds": [
+    {
+      "src": "cam-web/web/index.html",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "cam-web/ptz-proxy/server.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/cam-web/ptz-proxy/server.js"
+    },
+    {
+      "src": "/(robot|table|ceiling)/whep",
+      "dest": "/cam-web/ptz-proxy/server.js"
+    },
+    {
+      "src": "/hls/(.*)",
+      "dest": "/cam-web/ptz-proxy/server.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/cam-web/web/index.html"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  },
+  "functions": {
+    "cam-web/ptz-proxy/server.js": {
+      "maxDuration": 30
+    }
+  }
+}
