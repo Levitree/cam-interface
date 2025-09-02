@@ -19,8 +19,8 @@ app.use('/whep', express.text({ type: 'application/sdp' }));
 
 const CAM_USER = process.env.CAM_USER;
 const CAM_PASS = process.env.CAM_PASS;
-const ROBOT_CAM_IP = process.env.ROBOT_CAM_IP;
-const TABLE_CAM_IP = process.env.TABLE_CAM_IP;
+const ROBOT_CAM_IP = process.env.ROBOT_CAM_IP || '192.168.4.181';
+const TABLE_CAM_IP = process.env.TABLE_CAM_IP || '192.168.4.182';
 const MEDIAMTX_HTTP = process.env.MEDIAMTX_HTTP || 'http://127.0.0.1:8888';
 const MEDIAMTX_WHEP = process.env.MEDIAMTX_WHEP || 'http://127.0.0.1:8889';
 
@@ -174,11 +174,31 @@ app.post('/whep/:name', async (req, res) => {
     res.status(502).send('bad gateway');
   }
 });
-// Simple /robot/whep route for frontend
+// WHEP routes for both cameras
 app.use('/robot/whep', express.text({ type: 'application/sdp' }));
 app.post('/robot/whep', async (req, res) => {
   try {
     const target = `${MEDIAMTX_WHEP}/robot/whep`;
+    const response = await fetch(target, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/sdp' },
+      body: req.body || ''
+    });
+    const result = await response.text();
+    res.status(response.status);
+    if (response.headers.get('content-type')) {
+      res.set('Content-Type', response.headers.get('content-type'));
+    }
+    res.send(result);
+  } catch (error) {
+    res.status(502).send('bad gateway');
+  }
+});
+
+app.use('/table/whep', express.text({ type: 'application/sdp' }));
+app.post('/table/whep', async (req, res) => {
+  try {
+    const target = `${MEDIAMTX_WHEP}/table/whep`;
     const response = await fetch(target, {
       method: 'POST',
       headers: { 'Content-Type': 'application/sdp' },

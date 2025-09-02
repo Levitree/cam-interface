@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Robot Camera Control</title>
+  <title>Dual Camera Control</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     body { 
@@ -14,7 +14,33 @@
       display: flex;
       flex-direction: column;
       height: 100vh;
-      overflow: hidden; /* Prevent scrolling */
+      overflow: hidden;
+    }
+    
+    .cameras-container {
+      flex: 1;
+      display: flex;
+      gap: 10px;
+      padding: 10px;
+      min-height: 0;
+    }
+    
+    .camera-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    
+    .camera-header {
+      background: rgba(0, 0, 0, 0.8);
+      padding: 8px 15px;
+      text-align: center;
+      font-size: 14px;
+      font-weight: 600;
+      border-bottom: 1px solid #333;
     }
     
     .video-container { 
@@ -24,7 +50,7 @@
       align-items: center; 
       position: relative;
       padding: 10px;
-      min-height: 0; /* Allow flex shrinking */
+      min-height: 0;
     }
     
     video { 
@@ -32,41 +58,21 @@
       max-height: 100%; 
       object-fit: contain; 
       background: #000; 
-      border-radius: 8px;
+      border-radius: 6px;
     }
     
-    .controls {
+    .camera-controls {
       background: rgba(0, 0, 0, 0.9);
       padding: 15px;
       display: flex;
       justify-content: center;
-      gap: 20px;
-      flex-wrap: wrap;
       border-top: 1px solid #333;
-      flex-shrink: 0; /* Don't shrink controls */
-      max-height: 180px; /* Limit control height */
-      overflow: auto; /* Scroll controls if needed */
-    }
-    
-    .control-group {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 10px;
-    }
-    
-    .control-group h3 {
-      margin: 0;
-      font-size: 14px;
-      opacity: 0.8;
-      text-transform: uppercase;
-      letter-spacing: 1px;
     }
     
     .ptz-pad {
       display: grid;
-      grid-template-columns: repeat(3, 50px);
-      grid-template-rows: repeat(3, 50px);
+      grid-template-columns: repeat(3, 45px);
+      grid-template-rows: repeat(3, 45px);
       gap: 4px;
     }
     
@@ -94,16 +100,14 @@
       transform: scale(0.95);
     }
     
-
-    
     .status {
       position: absolute;
-      top: 10px;
-      right: 10px;
+      top: 8px;
+      right: 8px;
       background: rgba(0, 0, 0, 0.8);
-      padding: 6px 12px;
+      padding: 4px 8px;
       border-radius: 4px;
-      font-size: 12px;
+      font-size: 11px;
       border: 1px solid #333;
     }
     
@@ -118,10 +122,10 @@
     }
     
     @media (max-width: 768px) {
-      .controls {
-        gap: 15px;
-        padding: 10px;
-        max-height: 160px; /* Smaller on mobile */
+      .cameras-container {
+        flex-direction: column;
+        gap: 5px;
+        padding: 5px;
       }
       
       .ptz-pad {
@@ -130,39 +134,24 @@
         gap: 3px;
       }
       
-
+      .camera-controls {
+        padding: 10px;
+      }
       
-      .control-group h3 {
+      .camera-header {
         font-size: 12px;
-      }
-    }
-    
-    @media (max-height: 600px) {
-      .controls {
-        max-height: 120px; /* Even smaller on short screens */
-        padding: 8px;
-      }
-      
-      .ptz-pad {
-        grid-template-columns: repeat(3, 35px);
-        grid-template-rows: repeat(3, 35px);
-      }
-      
-      .video-container {
-        padding: 5px;
+        padding: 6px 10px;
       }
     }
   </style>
   <script>
-    // Allow HTTP for local dev (proxied by Express)
-  </script>
-  <script>
-    async function playWHEP(videoEl, whepUrl){
-      console.log('Starting WHEP connection to:', whepUrl);
+    // WebRTC WHEP connection
+    async function playWHEP(videoEl, whepUrl, cameraName) {
+      console.log(`Starting WHEP connection for ${cameraName}:`, whepUrl);
       const pc = new RTCPeerConnection({ iceServers: [] });
       pc.addTransceiver('video', { direction: 'recvonly' });
       pc.ontrack = e => { 
-        console.log('Video track received');
+        console.log(`Video track received for ${cameraName}`);
         if (!videoEl.srcObject) videoEl.srcObject = e.streams[0]; 
       };
       const offer = await pc.createOffer();
@@ -174,87 +163,111 @@
         body: offer.sdp 
       });
       
-      console.log('WHEP response:', response.status);
+      console.log(`WHEP response for ${cameraName}:`, response.status);
       if (!response.ok) {
-        console.error('WHEP failed:', response.status, await response.text());
+        console.error(`WHEP failed for ${cameraName}:`, response.status, await response.text());
         return;
       }
       
       const answer = await response.text();
       await pc.setRemoteDescription({ type: 'answer', sdp: answer });
-      console.log('WHEP connection established');
+      console.log(`WHEP connection established for ${cameraName}`);
       return pc;
     }
+    
     // PTZ control functions
-    async function sendPTZCommand(action, preset = null) {
+    async function sendPTZCommand(camera, action, preset = null) {
       try {
         const url = preset ? 
-          `/api/ptz/preset?camera=robot&preset=${preset}` :
-          `/api/ptz/${action === 'stop' ? 'stop' : 'start'}?camera=robot&action=${action}`;
+          `/api/ptz/preset?camera=${camera}&preset=${preset}` :
+          `/api/ptz/${action === 'stop' ? 'stop' : 'start'}?camera=${camera}&action=${action}`;
         
-        console.log('PTZ command:', action, preset ? `preset ${preset}` : '');
+        console.log(`PTZ command for ${camera}:`, action, preset ? `preset ${preset}` : '');
         const response = await fetch(url, { method: 'POST' });
         const result = await response.json();
         
         if (!response.ok) {
-          console.error('PTZ command failed:', result);
-          updateStatus('PTZ Error', 'error');
-          setTimeout(() => updateStatus('Connected', 'connected'), 2000);
+          console.error(`PTZ command failed for ${camera}:`, result);
+          updateStatus(camera, 'PTZ Error', 'error');
+          setTimeout(() => updateStatus(camera, 'Connected', 'connected'), 2000);
         }
         
         return response.ok;
       } catch (error) {
-        console.error('PTZ request failed:', error);
-        updateStatus('PTZ Error', 'error');
-        setTimeout(() => updateStatus('Connected', 'connected'), 2000);
+        console.error(`PTZ request failed for ${camera}:`, error);
+        updateStatus(camera, 'PTZ Error', 'error');
+        setTimeout(() => updateStatus(camera, 'Connected', 'connected'), 2000);
         return false;
       }
     }
     
-    function updateStatus(message, type = '') {
-      const status = document.getElementById('status');
+    function updateStatus(camera, message, type = '') {
+      const status = document.getElementById(`status-${camera}`);
       if (status) {
         status.textContent = message;
         status.className = `status ${type}`;
       }
     }
     
-    // Event handlers
-    function setupControls() {
-      // PTZ direction controls - short tap movements
-      document.querySelectorAll('.ptz-btn').forEach(btn => {
-        let moveTimeout;
+    // Event handlers for a specific camera
+    function setupCameraControls(camera) {
+      document.querySelectorAll(`[data-camera="${camera}"] .ptz-btn`).forEach(btn => {
+        let isPressed = false;
         
-        btn.addEventListener('mousedown', () => {
+        btn.addEventListener('mousedown', (e) => {
+          e.preventDefault();
           const action = btn.dataset.action;
+          
           if (action === 'stop') {
-            sendPTZCommand('stop');
+            sendPTZCommand(camera, 'stop');
             return;
           }
           
-          // Start movement
-          sendPTZCommand(action);
+          isPressed = true;
+          console.log(`Starting ${action} movement for ${camera} (hold to continue)`);
+          sendPTZCommand(camera, action);
+        });
+        
+        btn.addEventListener('mouseup', (e) => {
+          e.preventDefault();
+          if (isPressed) {
+            isPressed = false;
+            console.log(`Button released for ${camera} - stopping movement`);
+            sendPTZCommand(camera, 'stop');
+          }
+        });
+        
+        btn.addEventListener('mouseleave', (e) => {
+          e.preventDefault();
+          if (isPressed) {
+            isPressed = false;
+            console.log(`Mouse left button for ${camera} - stopping movement`);
+            sendPTZCommand(camera, 'stop');
+          }
+        });
+        
+        // Touch events for mobile
+        btn.addEventListener('touchstart', (e) => {
+          e.preventDefault();
+          const action = btn.dataset.action;
           
-          // Auto-stop after short duration for tap movements
-          moveTimeout = setTimeout(() => {
-            sendPTZCommand('stop');
-          }, 150); // 150ms movement duration - very short taps
+          if (action === 'stop') {
+            sendPTZCommand(camera, 'stop');
+            return;
+          }
+          
+          isPressed = true;
+          console.log(`Touch starting ${action} movement for ${camera}`);
+          sendPTZCommand(camera, action);
         });
         
-        btn.addEventListener('mouseup', () => {
-          if (moveTimeout) {
-            clearTimeout(moveTimeout);
-            moveTimeout = null;
+        btn.addEventListener('touchend', (e) => {
+          e.preventDefault();
+          if (isPressed) {
+            isPressed = false;
+            console.log(`Touch ended for ${camera} - stopping movement`);
+            sendPTZCommand(camera, 'stop');
           }
-          sendPTZCommand('stop');
-        });
-        
-        btn.addEventListener('mouseleave', () => {
-          if (moveTimeout) {
-            clearTimeout(moveTimeout);
-            moveTimeout = null;
-          }
-          sendPTZCommand('stop');
         });
       });
     }
@@ -264,40 +277,70 @@
     window.addEventListener('DOMContentLoaded', () => {
       const base = `${location.protocol}//${HOST}`;
       
-      // Start video stream
-      playWHEP(document.getElementById('vRobot'), `${base}/robot/whep`).then(() => {
-        updateStatus('Connected', 'connected');
+      // Start both video streams
+      playWHEP(document.getElementById('vRobot'), `${base}/robot/whep`, 'robot').then(() => {
+        updateStatus('robot', 'Connected', 'connected');
       }).catch(() => {
-        updateStatus('Connection Failed', 'error');
+        updateStatus('robot', 'Connection Failed', 'error');
       });
       
-      // Setup controls
-      setupControls();
+      playWHEP(document.getElementById('vTable'), `${base}/table/whep`, 'table').then(() => {
+        updateStatus('table', 'Connected', 'connected');
+      }).catch(() => {
+        updateStatus('table', 'Connection Failed', 'error');
+      });
+      
+      // Setup controls for both cameras
+      setupCameraControls('robot');
+      setupCameraControls('table');
     });
   </script>
 </head>
 <body>
-  <div class="video-container">
-    <video id="vRobot" autoplay playsinline muted></video>
-    <div id="status" class="status">Connecting...</div>
-  </div>
-  
-  <div class="controls">
-    <div class="control-group">
-      <h3>Camera Control</h3>
-      <div class="ptz-pad">
-        <div></div>
-        <button class="ptz-btn" data-action="up">↑</button>
-        <div></div>
-        <button class="ptz-btn" data-action="left">←</button>
-        <button class="ptz-btn" data-action="stop">⏹</button>
-        <button class="ptz-btn" data-action="right">→</button>
-        <div></div>
-        <button class="ptz-btn" data-action="down">↓</button>
-        <div></div>
+  <div class="cameras-container">
+    <!-- Robot Camera -->
+    <div class="camera-panel">
+      <div class="camera-header">Robot Camera</div>
+      <div class="video-container">
+        <video id="vRobot" autoplay playsinline muted></video>
+        <div id="status-robot" class="status">Connecting...</div>
+      </div>
+      <div class="camera-controls" data-camera="robot">
+        <div class="ptz-pad">
+          <div></div>
+          <button class="ptz-btn" data-action="up">↑</button>
+          <div></div>
+          <button class="ptz-btn" data-action="left">←</button>
+          <button class="ptz-btn" data-action="stop">⏹</button>
+          <button class="ptz-btn" data-action="right">→</button>
+          <div></div>
+          <button class="ptz-btn" data-action="down">↓</button>
+          <div></div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Table Camera -->
+    <div class="camera-panel">
+      <div class="camera-header">Table Camera</div>
+      <div class="video-container">
+        <video id="vTable" autoplay playsinline muted></video>
+        <div id="status-table" class="status">Connecting...</div>
+      </div>
+      <div class="camera-controls" data-camera="table">
+        <div class="ptz-pad">
+          <div></div>
+          <button class="ptz-btn" data-action="up">↑</button>
+          <div></div>
+          <button class="ptz-btn" data-action="left">←</button>
+          <button class="ptz-btn" data-action="stop">⏹</button>
+          <button class="ptz-btn" data-action="right">→</button>
+          <div></div>
+          <button class="ptz-btn" data-action="down">↓</button>
+          <div></div>
+        </div>
       </div>
     </div>
   </div>
 </body>
 </html>
-
