@@ -161,31 +161,31 @@ app.post('/whep/:name', async (req, res) => {
 });
 // POST /robot/whep → forward to MediaMTX
 app.post('/robot/whep', async (req, res) => {
+  console.log('[WHEP] /robot/whep route hit!', typeof req.body, req.body?.length);
   try {
-    const name = 'robot'; // Hardcoded for now, can be dynamic
-    const target = `${MEDIAMTX_WHEP}/${encodeURIComponent(name)}/whep`;
-    console.log(`[WHEP] POST /robot/whep → %s (sdp %d bytes)`, target, (req.body || '').length);
+    const target = `${MEDIAMTX_WHEP}/robot/whep`;
+    console.log(`[WHEP] Forwarding to ${target}`);
 
-    const headers = { 'Content-Type': 'application/sdp' };
-    // Explicitly set Content-Length for raw body forwarding
-    if (req.body) {
-      headers['Content-Length'] = Buffer.byteLength(req.body, 'utf8');
-    }
-
-    const r = await fetch(target, {
+    const response = await fetch(target, {
       method: 'POST',
-      headers: headers,
+      headers: { 
+        'Content-Type': 'application/sdp',
+        'Content-Length': req.body ? Buffer.byteLength(req.body, 'utf8') : '0'
+      },
       body: req.body || ''
     });
-    const txt = await r.text();
-    console.log(`[WHEP] ← %d (%d bytes)`, r.status, txt.length);
-    res.status(r.status);
-    const ct = r.headers.get('content-type');
-    if (ct) res.set('Content-Type', ct);
-    res.send(txt);
-  } catch (e) {
-    console.error('[WHEP] error', e.message);
-    res.status(502).send('bad gateway');
+    
+    const result = await response.text();
+    console.log(`[WHEP] Response: ${response.status}, ${result.length} bytes`);
+    
+    res.status(response.status);
+    if (response.headers.get('content-type')) {
+      res.set('Content-Type', response.headers.get('content-type'));
+    }
+    res.send(result);
+  } catch (error) {
+    console.error('[WHEP] Error:', error.message);
+    res.status(502).json({ error: 'WHEP proxy error' });
   }
 });
 
@@ -197,21 +197,7 @@ app.use('/hls', createProxyMiddleware({
   pathRewrite: (path) => path.replace(/^\/hls\//, '/'),
 }));
 
-// Proxy /robot/* to MediaMTX WHEP server (so /robot/whep works)
-app.use('/robot', express.text({ type: 'application/sdp' }));
-app.use('/robot', createProxyMiddleware({
-  target: MEDIAMTX_WHEP,
-  changeOrigin: true,
-  xfwd: true,
-  onProxyReq: (proxyReq, req) => {
-    if (typeof req.body === 'string') {
-      const len = Buffer.byteLength(req.body);
-      proxyReq.setHeader('Content-Length', String(len));
-      proxyReq.removeHeader('content-length');
-      proxyReq.write(req.body);
-    }
-  }
-}));
+// Note: Removed generic /robot/* proxy to avoid conflicts with specific routes
 
 // Quiet favicon noise
 app.get('/favicon.ico', (req, res) => res.status(204).end());
