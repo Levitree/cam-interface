@@ -26,28 +26,94 @@ function ptzUrl(ip, params) {
   return `http://${CAM_USER}:${CAM_PASS}@${ip}/cgi-bin/ptz.cgi?${qs}`;
 }
 
+// PTZ action mapping
+const PTZ_ACTIONS = {
+  'up': 'Up',
+  'down': 'Down', 
+  'left': 'Left',
+  'right': 'Right',
+  'up-left': 'LeftUp',
+  'up-right': 'RightUp',
+  'down-left': 'LeftDown',
+  'down-right': 'RightDown',
+  'zoom-in': 'ZoomTele',
+  'zoom-out': 'ZoomWide',
+  'stop': 'Stop'
+};
+
 app.post('/api/ptz/start', async (req, res) => {
-  const { cam = 'robot', code, speed = 4 } = req.body;
-  const ip = cam === 'table' ? TABLE_CAM_IP : ROBOT_CAM_IP;
+  const { camera = 'robot', action, speed = 4 } = { ...req.body, ...req.query };
+  const ip = camera === 'table' ? TABLE_CAM_IP : ROBOT_CAM_IP;
+  
+  if (!ip) {
+    return res.status(400).json({ error: 'Camera IP not configured' });
+  }
+  
+  const code = PTZ_ACTIONS[action];
+  if (!code) {
+    return res.status(400).json({ error: `Unknown action: ${action}` });
+  }
+  
+  console.log(`[PTZ] ${camera} start ${action} (${code})`);
   const url = ptzUrl(ip, { action: 'start', channel: 1, code, arg1: 0, arg2: speed, arg3: 0 });
-  const r = await fetch(url).catch(()=>({ok:false}));
-  res.json({ ok: r.ok });
+  
+  try {
+    const r = await fetch(url);
+    const result = await r.text();
+    console.log(`[PTZ] Response: ${r.status} ${result}`);
+    res.json({ ok: r.ok, status: r.status, result });
+  } catch (error) {
+    console.error(`[PTZ] Error:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 app.post('/api/ptz/stop', async (req, res) => {
-  const { cam = 'robot', code } = req.body;
-  const ip = cam === 'table' ? TABLE_CAM_IP : ROBOT_CAM_IP;
-  const url = ptzUrl(ip, { action: 'stop', channel: 1, code, arg1: 0, arg2: 0, arg3: 0 });
-  const r = await fetch(url).catch(()=>({ok:false}));
-  res.json({ ok: r.ok });
+  const { camera = 'robot', action = 'stop' } = { ...req.body, ...req.query };
+  const ip = camera === 'table' ? TABLE_CAM_IP : ROBOT_CAM_IP;
+  
+  if (!ip) {
+    return res.status(400).json({ error: 'Camera IP not configured' });
+  }
+  
+  console.log(`[PTZ] ${camera} stop`);
+  const url = ptzUrl(ip, { action: 'stop', channel: 1, code: 'Stop', arg1: 0, arg2: 0, arg3: 0 });
+  
+  try {
+    const r = await fetch(url);
+    const result = await r.text();
+    console.log(`[PTZ] Stop response: ${r.status} ${result}`);
+    res.json({ ok: r.ok, status: r.status, result });
+  } catch (error) {
+    console.error(`[PTZ] Stop error:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 app.post('/api/ptz/preset', async (req, res) => {
-  const { cam = 'robot', id } = req.body;
-  const ip = cam === 'table' ? TABLE_CAM_IP : ROBOT_CAM_IP;
-  const url = ptzUrl(ip, { action: 'start', channel: 1, code: 'GotoPreset', arg1: 0, arg2: id, arg3: 0 });
-  const r = await fetch(url).catch(()=>({ok:false}));
-  res.json({ ok: r.ok });
+  const { camera = 'robot', preset } = { ...req.body, ...req.query };
+  const ip = camera === 'table' ? TABLE_CAM_IP : ROBOT_CAM_IP;
+  
+  if (!ip) {
+    return res.status(400).json({ error: 'Camera IP not configured' });
+  }
+  
+  if (!preset || isNaN(preset)) {
+    return res.status(400).json({ error: 'Invalid preset number' });
+  }
+  
+  console.log(`[PTZ] ${camera} goto preset ${preset}`);
+  const url = ptzUrl(ip, { action: 'start', channel: 1, code: 'GotoPreset', arg1: 0, arg2: preset, arg3: 0 });
+  
+  try {
+    const r = await fetch(url);
+    const result = await r.text();
+    console.log(`[PTZ] Preset response: ${r.status} ${result}`);
+    res.json({ ok: r.ok, status: r.status, result });
+  } catch (error) {
+    console.error(`[PTZ] Preset error:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Proxy WHEP and HLS to local MediaMTX for dev
