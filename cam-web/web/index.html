@@ -10,30 +10,31 @@
   </script>
   <script>
     async function playWHEP(videoEl, whepUrl){
+      console.log('Starting WHEP connection to:', whepUrl);
       const pc = new RTCPeerConnection({ iceServers: [] });
       pc.addTransceiver('video', { direction: 'recvonly' });
-      pc.ontrack = e => { if (!videoEl.srcObject) videoEl.srcObject = e.streams[0]; };
+      pc.ontrack = e => { 
+        console.log('Video track received');
+        if (!videoEl.srcObject) videoEl.srcObject = e.streams[0]; 
+      };
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      // Try both common endpoint styles
-      const urls = [
-        whepUrl,
-        whepUrl.replace('/whep?path=', '/whep/'),
-        `${location.protocol}//${location.host}/robot/whep`,
-        `${location.protocol}//${location.hostname}:8889/robot/whep`,
-      ];
-      let ok = false;
-      for (const url of urls){
-        console.log('WHEP POST', url);
-        const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/sdp'}, body: offer.sdp });
-        console.log('WHEP status', r.status);
-        if (r.ok) {
-          const answer = await r.text();
-          await pc.setRemoteDescription({ type: 'answer', sdp: answer });
-          ok = true; break;
-        }
+      
+      const response = await fetch(whepUrl, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/sdp' }, 
+        body: offer.sdp 
+      });
+      
+      console.log('WHEP response:', response.status);
+      if (!response.ok) {
+        console.error('WHEP failed:', response.status, await response.text());
+        return;
       }
-      if (!ok) { console.error('WHEP POST failed (404/err)'); return; }
+      
+      const answer = await response.text();
+      await pc.setRemoteDescription({ type: 'answer', sdp: answer });
+      console.log('WHEP connection established');
       return pc;
     }
     // If hosting frontend elsewhere (e.g., Vercel), set window.PUBLIC_HOST = 'streams.yourdomain.com'

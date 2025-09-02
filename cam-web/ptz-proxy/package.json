@@ -16,6 +16,7 @@
     "mtx": "bash ../scripts/run-mediamtx-macos.sh",
     "test:stream": "node tests/stream-check.js",
     "test:server": "node tests/server-test.js",
+    "test:full": "node tests/full-stack-test.js",
     "test": "npm run test:server"
   }
 }
