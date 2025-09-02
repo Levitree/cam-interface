@@ -29,7 +29,6 @@
       "dest": "/cam-web/web/index.html"
     }
   ],
-
   "functions": {
     "cam-web/ptz-proxy/server.js": {
       "maxDuration": 30
