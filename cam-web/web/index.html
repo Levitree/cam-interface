@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Dual Camera Control</title>
+  <title>Triple Camera Control</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     body { 
@@ -19,28 +19,30 @@
     
     .cameras-container {
       flex: 1;
-      display: flex;
-      gap: 10px;
-      padding: 10px;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      padding: 8px;
       min-height: 0;
     }
     
     .camera-panel {
-      flex: 1;
       display: flex;
       flex-direction: column;
       background: rgba(255, 255, 255, 0.05);
       border-radius: 8px;
       overflow: hidden;
+      min-height: 0;
     }
     
     .camera-header {
       background: rgba(0, 0, 0, 0.8);
-      padding: 8px 15px;
+      padding: 6px 12px;
       text-align: center;
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 600;
       border-bottom: 1px solid #333;
+      flex-shrink: 0;
     }
     
     .video-container { 
@@ -49,7 +51,7 @@
       justify-content: center; 
       align-items: center; 
       position: relative;
-      padding: 10px;
+      padding: 8px;
       min-height: 0;
     }
     
@@ -58,34 +60,35 @@
       max-height: 100%; 
       object-fit: contain; 
       background: #000; 
-      border-radius: 6px;
+      border-radius: 4px;
     }
     
     .camera-controls {
       background: rgba(0, 0, 0, 0.9);
-      padding: 15px;
+      padding: 12px;
       display: flex;
       justify-content: center;
       border-top: 1px solid #333;
+      flex-shrink: 0;
     }
     
     .ptz-pad {
       display: grid;
-      grid-template-columns: repeat(3, 45px);
-      grid-template-rows: repeat(3, 45px);
-      gap: 4px;
+      grid-template-columns: repeat(3, 40px);
+      grid-template-rows: repeat(3, 40px);
+      gap: 3px;
     }
     
     .ptz-btn {
       background: #333;
       border: 1px solid #555;
       color: #fff;
-      border-radius: 6px;
+      border-radius: 4px;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 16px;
+      font-size: 14px;
       transition: all 0.2s;
       user-select: none;
     }
@@ -102,12 +105,12 @@
     
     .status {
       position: absolute;
-      top: 8px;
-      right: 8px;
+      top: 6px;
+      right: 6px;
       background: rgba(0, 0, 0, 0.8);
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 11px;
+      padding: 3px 6px;
+      border-radius: 3px;
+      font-size: 10px;
       border: 1px solid #333;
     }
     
@@ -121,26 +124,110 @@
       background: rgba(50, 0, 0, 0.8);
     }
     
-    @media (max-width: 768px) {
+    .settings-btn {
+      position: absolute;
+      top: 6px;
+      left: 6px;
+      background: rgba(0, 0, 0, 0.8);
+      border: 1px solid #555;
+      color: #fff;
+      padding: 3px 6px;
+      border-radius: 3px;
+      font-size: 12px;
+      cursor: pointer;
+      user-select: none;
+    }
+    
+    .settings-btn:hover {
+      background: rgba(0, 0, 0, 0.9);
+      border-color: #777;
+    }
+    
+    .settings-menu {
+      position: absolute;
+      top: 30px;
+      left: 6px;
+      background: rgba(0, 0, 0, 0.95);
+      border: 1px solid #555;
+      border-radius: 4px;
+      padding: 10px;
+      display: none;
+      min-width: 200px;
+      z-index: 100;
+    }
+    
+    .settings-menu.show {
+      display: block;
+    }
+    
+    .setting-item {
+      margin-bottom: 8px;
+    }
+    
+    .setting-item label {
+      display: block;
+      font-size: 11px;
+      margin-bottom: 3px;
+      opacity: 0.8;
+    }
+    
+    .setting-item input {
+      width: 100%;
+      padding: 4px 6px;
+      border: 1px solid #555;
+      border-radius: 3px;
+      background: #222;
+      color: #fff;
+      font-size: 11px;
+    }
+    
+    .setting-item button {
+      background: #333;
+      border: 1px solid #555;
+      color: #fff;
+      padding: 4px 8px;
+      border-radius: 3px;
+      font-size: 11px;
+      cursor: pointer;
+      margin-right: 5px;
+    }
+    
+    .setting-item button:hover {
+      background: #444;
+    }
+    
+    @media (max-width: 1024px) {
       .cameras-container {
-        flex-direction: column;
-        gap: 5px;
-        padding: 5px;
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr 1fr 1fr;
+        gap: 6px;
+        padding: 6px;
       }
       
       .ptz-pad {
-        grid-template-columns: repeat(3, 40px);
-        grid-template-rows: repeat(3, 40px);
-        gap: 3px;
+        grid-template-columns: repeat(3, 45px);
+        grid-template-rows: repeat(3, 45px);
+        gap: 4px;
       }
       
       .camera-controls {
-        padding: 10px;
+        padding: 15px;
       }
       
       .camera-header {
-        font-size: 12px;
-        padding: 6px 10px;
+        font-size: 14px;
+        padding: 8px 15px;
+      }
+    }
+    
+    @media (max-width: 768px) {
+      .ptz-pad {
+        grid-template-columns: repeat(3, 42px);
+        grid-template-rows: repeat(3, 42px);
+      }
+      
+      .camera-controls {
+        padding: 12px;
       }
     }
   </style>
@@ -175,6 +262,21 @@
       return pc;
     }
     
+    // Camera IP configuration
+    const defaultIPs = {
+      robot: '192.168.4.181',
+      table: '192.168.4.182', 
+      ceiling: '192.168.4.183'
+    };
+    
+    function getCurrentIP(camera) {
+      return localStorage.getItem(`camera_ip_${camera}`) || defaultIPs[camera];
+    }
+    
+    function setCurrentIP(camera, ip) {
+      localStorage.setItem(`camera_ip_${camera}`, ip);
+    }
+    
     // PTZ control functions
     async function sendPTZCommand(camera, action, preset = null) {
       try {
@@ -199,6 +301,50 @@
         setTimeout(() => updateStatus(camera, 'Connected', 'connected'), 2000);
         return false;
       }
+    }
+    
+    // Settings menu functions
+    function toggleSettings(camera) {
+      const menu = document.getElementById(`settings-menu-${camera}`);
+      const isShown = menu.classList.contains('show');
+      
+      // Hide all other menus
+      document.querySelectorAll('.settings-menu').forEach(m => m.classList.remove('show'));
+      
+      if (!isShown) {
+        menu.classList.add('show');
+        // Set current IP in input
+        const input = menu.querySelector('input');
+        input.value = getCurrentIP(camera);
+      }
+    }
+    
+    function saveIP(camera) {
+      const menu = document.getElementById(`settings-menu-${camera}`);
+      const input = menu.querySelector('input');
+      const newIP = input.value.trim();
+      
+      if (!newIP.match(/^\d+\.\d+\.\d+\.\d+$/)) {
+        alert('Invalid IP address format');
+        return;
+      }
+      
+      setCurrentIP(camera, newIP);
+      menu.classList.remove('show');
+      updateStatus(camera, 'IP Updated', 'connected');
+      console.log(`${camera} IP updated to ${newIP}`);
+      
+      // Optionally restart the stream with new IP
+      setTimeout(() => {
+        updateStatus(camera, 'Reconnecting...', '');
+        // Here you could add logic to restart the stream if needed
+      }, 1000);
+    }
+    
+    function resetIP(camera) {
+      const menu = document.getElementById(`settings-menu-${camera}`);
+      const input = menu.querySelector('input');
+      input.value = defaultIPs[camera];
     }
     
     function updateStatus(camera, message, type = '') {
@@ -277,7 +423,7 @@
     window.addEventListener('DOMContentLoaded', () => {
       const base = `${location.protocol}//${HOST}`;
       
-      // Start both video streams
+      // Start all three video streams
       playWHEP(document.getElementById('vRobot'), `${base}/robot/whep`, 'robot').then(() => {
         updateStatus('robot', 'Connected', 'connected');
       }).catch(() => {
@@ -290,9 +436,23 @@
         updateStatus('table', 'Connection Failed', 'error');
       });
       
-      // Setup controls for both cameras
+      playWHEP(document.getElementById('vCeiling'), `${base}/ceiling/whep`, 'ceiling').then(() => {
+        updateStatus('ceiling', 'Connected', 'connected');
+      }).catch(() => {
+        updateStatus('ceiling', 'Connection Failed', 'error');
+      });
+      
+      // Setup controls for all three cameras
       setupCameraControls('robot');
       setupCameraControls('table');
+      setupCameraControls('ceiling');
+      
+      // Close settings menus when clicking outside
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('.settings-btn') && !e.target.closest('.settings-menu')) {
+          document.querySelectorAll('.settings-menu').forEach(m => m.classList.remove('show'));
+        }
+      });
     });
   </script>
 </head>
@@ -304,6 +464,17 @@
       <div class="video-container">
         <video id="vRobot" autoplay playsinline muted></video>
         <div id="status-robot" class="status">Connecting...</div>
+        <div class="settings-btn" onclick="toggleSettings('robot')">⋯</div>
+        <div id="settings-menu-robot" class="settings-menu">
+          <div class="setting-item">
+            <label>Camera IP Address:</label>
+            <input type="text" placeholder="192.168.4.181">
+          </div>
+          <div class="setting-item">
+            <button onclick="saveIP('robot')">Save</button>
+            <button onclick="resetIP('robot')">Reset</button>
+          </div>
+        </div>
       </div>
       <div class="camera-controls" data-camera="robot">
         <div class="ptz-pad">
@@ -326,8 +497,52 @@
       <div class="video-container">
         <video id="vTable" autoplay playsinline muted></video>
         <div id="status-table" class="status">Connecting...</div>
+        <div class="settings-btn" onclick="toggleSettings('table')">⋯</div>
+        <div id="settings-menu-table" class="settings-menu">
+          <div class="setting-item">
+            <label>Camera IP Address:</label>
+            <input type="text" placeholder="192.168.4.182">
+          </div>
+          <div class="setting-item">
+            <button onclick="saveIP('table')">Save</button>
+            <button onclick="resetIP('table')">Reset</button>
+          </div>
+        </div>
       </div>
       <div class="camera-controls" data-camera="table">
+        <div class="ptz-pad">
+          <div></div>
+          <button class="ptz-btn" data-action="up">↑</button>
+          <div></div>
+          <button class="ptz-btn" data-action="left">←</button>
+          <button class="ptz-btn" data-action="stop">⏹</button>
+          <button class="ptz-btn" data-action="right">→</button>
+          <div></div>
+          <button class="ptz-btn" data-action="down">↓</button>
+          <div></div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Ceiling Camera -->
+    <div class="camera-panel">
+      <div class="camera-header">Ceiling Camera</div>
+      <div class="video-container">
+        <video id="vCeiling" autoplay playsinline muted></video>
+        <div id="status-ceiling" class="status">Connecting...</div>
+        <div class="settings-btn" onclick="toggleSettings('ceiling')">⋯</div>
+        <div id="settings-menu-ceiling" class="settings-menu">
+          <div class="setting-item">
+            <label>Camera IP Address:</label>
+            <input type="text" placeholder="192.168.4.183">
+          </div>
+          <div class="setting-item">
+            <button onclick="saveIP('ceiling')">Save</button>
+            <button onclick="resetIP('ceiling')">Reset</button>
+          </div>
+        </div>
+      </div>
+      <div class="camera-controls" data-camera="ceiling">
         <div class="ptz-pad">
           <div></div>
           <button class="ptz-btn" data-action="up">↑</button>

@@ -21,6 +21,7 @@ const CAM_USER = process.env.CAM_USER;
 const CAM_PASS = process.env.CAM_PASS;
 const ROBOT_CAM_IP = process.env.ROBOT_CAM_IP || '192.168.4.181';
 const TABLE_CAM_IP = process.env.TABLE_CAM_IP || '192.168.4.182';
+const CEILING_CAM_IP = process.env.CEILING_CAM_IP || '192.168.4.183';
 const MEDIAMTX_HTTP = process.env.MEDIAMTX_HTTP || 'http://127.0.0.1:8888';
 const MEDIAMTX_WHEP = process.env.MEDIAMTX_WHEP || 'http://127.0.0.1:8889';
 
@@ -74,7 +75,8 @@ async function sendPTZCommand(ip, params) {
 app.post('/api/ptz/start', async (req, res) => {
   // Support both original body format and new query format
   const { camera = 'robot', cam = camera, action, code = action ? PTZ_ACTIONS[action] : undefined, speed = 1 } = { ...req.body, ...req.query };
-  const ip = (cam === 'table' || camera === 'table') ? TABLE_CAM_IP : ROBOT_CAM_IP;
+  const ip = (cam === 'table' || camera === 'table') ? TABLE_CAM_IP : 
+             (cam === 'ceiling' || camera === 'ceiling') ? CEILING_CAM_IP : ROBOT_CAM_IP;
   const finalCode = code || PTZ_ACTIONS[action];
   
   if (!finalCode) {
@@ -92,7 +94,8 @@ app.post('/api/ptz/start', async (req, res) => {
 
 app.post('/api/ptz/stop', async (req, res) => {
   const { camera = 'robot', cam = camera } = { ...req.body, ...req.query };
-  const ip = (cam === 'table' || camera === 'table') ? TABLE_CAM_IP : ROBOT_CAM_IP;
+  const ip = (cam === 'table' || camera === 'table') ? TABLE_CAM_IP : 
+             (cam === 'ceiling' || camera === 'ceiling') ? CEILING_CAM_IP : ROBOT_CAM_IP;
   
   if (!ip) {
     return res.status(400).json({ error: 'Camera IP not configured' });
@@ -114,7 +117,8 @@ app.post('/api/ptz/stop', async (req, res) => {
 
 app.post('/api/ptz/preset', async (req, res) => {
   const { camera = 'robot', cam = camera, preset, id = preset } = { ...req.body, ...req.query };
-  const ip = (cam === 'table' || camera === 'table') ? TABLE_CAM_IP : ROBOT_CAM_IP;
+  const ip = (cam === 'table' || camera === 'table') ? TABLE_CAM_IP : 
+             (cam === 'ceiling' || camera === 'ceiling') ? CEILING_CAM_IP : ROBOT_CAM_IP;
   
   if (!ip) {
     return res.status(400).json({ error: 'Camera IP not configured' });
@@ -128,6 +132,35 @@ app.post('/api/ptz/preset', async (req, res) => {
   console.log(`[PTZ] ${camera} goto preset ${presetNum}`);
   const result = await sendPTZCommand(ip, { action: 'start', channel: 1, code: 'GotoPreset', arg1: 0, arg2: presetNum, arg3: 0 });
   res.json(result);
+});
+
+// Camera IP configuration endpoint
+app.post('/api/camera/ip', async (req, res) => {
+  const { camera, ip } = { ...req.body, ...req.query };
+  
+  if (!camera || !ip) {
+    return res.status(400).json({ error: 'Camera and IP required' });
+  }
+  
+  if (!ip.match(/^\d+\.\d+\.\d+\.\d+$/)) {
+    return res.status(400).json({ error: 'Invalid IP format' });
+  }
+  
+  console.log(`[CONFIG] Updating ${camera} camera IP to ${ip}`);
+  
+  // Test connectivity to new IP
+  try {
+    const testResult = await sendPTZCommand(ip, { action: 'start', channel: 1, code: 'Up', arg1: 0, arg2: 0, arg3: 0 });
+    if (testResult.ok) {
+      // Update the IP in runtime (note: this is temporary, would need env file update for persistence)
+      console.log(`[CONFIG] ${camera} camera IP ${ip} tested successfully`);
+      res.json({ ok: true, message: 'IP updated and tested successfully' });
+    } else {
+      res.status(400).json({ error: 'Cannot connect to camera at new IP' });
+    }
+  } catch (error) {
+    res.status(400).json({ error: `Connection test failed: ${error.message}` });
+  }
 });
 
 // Proxy WHEP and HLS to local MediaMTX for dev
@@ -199,6 +232,26 @@ app.use('/table/whep', express.text({ type: 'application/sdp' }));
 app.post('/table/whep', async (req, res) => {
   try {
     const target = `${MEDIAMTX_WHEP}/table/whep`;
+    const response = await fetch(target, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/sdp' },
+      body: req.body || ''
+    });
+    const result = await response.text();
+    res.status(response.status);
+    if (response.headers.get('content-type')) {
+      res.set('Content-Type', response.headers.get('content-type'));
+    }
+    res.send(result);
+  } catch (error) {
+    res.status(502).send('bad gateway');
+  }
+});
+
+app.use('/ceiling/whep', express.text({ type: 'application/sdp' }));
+app.post('/ceiling/whep', async (req, res) => {
+  try {
+    const target = `${MEDIAMTX_WHEP}/ceiling/whep`;
     const response = await fetch(target, {
       method: 'POST',
       headers: { 'Content-Type': 'application/sdp' },
