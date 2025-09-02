@@ -2,8 +2,6 @@ import express from 'express';
 import fetch from 'node-fetch';
 import compression from 'compression';
 import { createProxyMiddleware } from 'http-proxy-middleware';
-import http from 'http';
-import { raw as expressRaw } from 'express';
 import dotenv from 'dotenv';
 
 dotenv.config({ path: new URL('../.env', import.meta.url).pathname });
@@ -13,6 +11,7 @@ app.use(compression());
 app.use(express.json());
 // Accept raw SDP for WHEP endpoints
 app.use('/whep', express.text({ type: 'application/sdp' }));
+app.use('/robot/whep', express.text({ type: 'application/sdp' }));
 
 const CAM_USER = process.env.CAM_USER;
 const CAM_PASS = process.env.CAM_PASS;
@@ -160,31 +159,32 @@ app.post('/whep/:name', async (req, res) => {
     res.status(502).send('bad gateway');
   }
 });
-// Direct WHEP forward using raw Buffer to preserve SDP newlines
-app.post('/robot/whep', expressRaw({ type: () => true, limit: '2mb' }), (req, res) => {
+// POST /robot/whep → forward to MediaMTX
+app.post('/robot/whep', async (req, res) => {
   try {
-    const { hostname, port } = new URL(MEDIAMTX_WHEP);
-    const options = {
-      hostname,
-      port: port ? Number(port) : 80,
-      path: '/robot/whep',
+    const name = 'robot'; // Hardcoded for now, can be dynamic
+    const target = `${MEDIAMTX_WHEP}/${encodeURIComponent(name)}/whep`;
+    console.log(`[WHEP] POST /robot/whep → %s (sdp %d bytes)`, target, (req.body || '').length);
+
+    const headers = { 'Content-Type': 'application/sdp' };
+    // Explicitly set Content-Length for raw body forwarding
+    if (req.body) {
+      headers['Content-Length'] = Buffer.byteLength(req.body, 'utf8');
+    }
+
+    const r = await fetch(target, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/sdp', 'Content-Length': Buffer.byteLength(req.body || 0) }
-    };
-    const pr = http.request(options, (r) => {
-      const chunks = [];
-      r.on('data', (d) => chunks.push(d));
-      r.on('end', () => {
-        res.status(r.statusCode || 502);
-        const ct = r.headers['content-type'];
-        if (ct) res.set('Content-Type', ct);
-        res.send(Buffer.concat(chunks));
-      });
+      headers: headers,
+      body: req.body || ''
     });
-    pr.on('error', () => res.status(502).send('bad gateway'));
-    if (req.body && req.body.length) pr.write(req.body);
-    pr.end();
-  } catch {
+    const txt = await r.text();
+    console.log(`[WHEP] ← %d (%d bytes)`, r.status, txt.length);
+    res.status(r.status);
+    const ct = r.headers.get('content-type');
+    if (ct) res.set('Content-Type', ct);
+    res.send(txt);
+  } catch (e) {
+    console.error('[WHEP] error', e.message);
     res.status(502).send('bad gateway');
   }
 });
