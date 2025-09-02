@@ -14,7 +14,9 @@
     "start": "node server.js",
     "dev": "concurrently -k \"npm:mtx\" \"npm:start\"",
     "mtx": "bash ../scripts/run-mediamtx-macos.sh",
-    "test:stream": "node tests/stream-check.js"
+    "test:stream": "node tests/stream-check.js",
+    "test:server": "node tests/server-test.js",
+    "test": "npm run test:server"
   }
 }
 

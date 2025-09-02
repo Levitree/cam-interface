@@ -2,6 +2,7 @@ import express from 'express';
 import fetch from 'node-fetch';
 import compression from 'compression';
 import { createProxyMiddleware } from 'http-proxy-middleware';
+import http from 'http';
 import dotenv from 'dotenv';
 
 dotenv.config({ path: new URL('../.env', import.meta.url).pathname });
@@ -19,52 +20,30 @@ const TABLE_CAM_IP = process.env.TABLE_CAM_IP;
 const MEDIAMTX_HTTP = process.env.MEDIAMTX_HTTP || 'http://127.0.0.1:8888';
 const MEDIAMTX_WHEP = process.env.MEDIAMTX_WHEP || 'http://127.0.0.1:8889';
 
-// PTZ action mapping for new UI
-const PTZ_ACTIONS = {
-  'up': 'Up',
-  'down': 'Down', 
-  'left': 'Left',
-  'right': 'Right',
-  'up-left': 'LeftUp',
-  'up-right': 'RightUp',
-  'down-left': 'LeftDown',
-  'down-right': 'RightDown',
-  'zoom-in': 'ZoomTele',
-  'zoom-out': 'ZoomWide',
-  'stop': 'Stop'
-};
-
 function ptzUrl(ip, params) {
   const qs = new URLSearchParams(params).toString();
   return `http://${CAM_USER}:${CAM_PASS}@${ip}/cgi-bin/ptz.cgi?${qs}`;
 }
 
 app.post('/api/ptz/start', async (req, res) => {
-  // Support both old body format and new query format
-  const { camera = 'robot', cam = camera, action, code = action ? PTZ_ACTIONS[action] : undefined, speed = 4 } = { ...req.body, ...req.query };
-  const ip = (cam === 'table' || camera === 'table') ? TABLE_CAM_IP : ROBOT_CAM_IP;
-  const finalCode = code || PTZ_ACTIONS[action];
-  
-  if (!finalCode) {
-    return res.status(400).json({ error: `Unknown action: ${action}` });
-  }
-  
-  const url = ptzUrl(ip, { action: 'start', channel: 1, code: finalCode, arg1: 0, arg2: speed, arg3: 0 });
+  const { cam = 'robot', code, speed = 4 } = req.body;
+  const ip = cam === 'table' ? TABLE_CAM_IP : ROBOT_CAM_IP;
+  const url = ptzUrl(ip, { action: 'start', channel: 1, code, arg1: 0, arg2: speed, arg3: 0 });
   const r = await fetch(url).catch(()=>({ok:false}));
   res.json({ ok: r.ok });
 });
 
 app.post('/api/ptz/stop', async (req, res) => {
-  const { camera = 'robot', cam = camera } = { ...req.body, ...req.query };
-  const ip = (cam === 'table' || camera === 'table') ? TABLE_CAM_IP : ROBOT_CAM_IP;
-  const url = ptzUrl(ip, { action: 'stop', channel: 1, code: 'Stop', arg1: 0, arg2: 0, arg3: 0 });
+  const { cam = 'robot', code } = req.body;
+  const ip = cam === 'table' ? TABLE_CAM_IP : ROBOT_CAM_IP;
+  const url = ptzUrl(ip, { action: 'stop', channel: 1, code, arg1: 0, arg2: 0, arg3: 0 });
   const r = await fetch(url).catch(()=>({ok:false}));
   res.json({ ok: r.ok });
 });
 
 app.post('/api/ptz/preset', async (req, res) => {
-  const { camera = 'robot', cam = camera, preset, id = preset } = { ...req.body, ...req.query };
-  const ip = (cam === 'table' || camera === 'table') ? TABLE_CAM_IP : ROBOT_CAM_IP;
+  const { cam = 'robot', id } = req.body;
+  const ip = cam === 'table' ? TABLE_CAM_IP : ROBOT_CAM_IP;
   const url = ptzUrl(ip, { action: 'start', channel: 1, code: 'GotoPreset', arg1: 0, arg2: id, arg3: 0 });
   const r = await fetch(url).catch(()=>({ok:false}));
   res.json({ ok: r.ok });
@@ -114,7 +93,7 @@ app.post('/whep/:name', async (req, res) => {
     res.status(502).send('bad gateway');
   }
 });
-// Simple /robot/whep route that forwards to MediaMTX
+// Simple /robot/whep route for frontend
 app.use('/robot/whep', express.text({ type: 'application/sdp' }));
 app.post('/robot/whep', async (req, res) => {
   try {
@@ -143,7 +122,21 @@ app.use('/hls', createProxyMiddleware({
   pathRewrite: (path) => path.replace(/^\/hls\//, '/'),
 }));
 
-// Note: Removed generic /robot/* proxy to avoid conflicts with specific routes
+// Proxy /robot/* to MediaMTX WHEP server (so /robot/whep works)
+app.use('/robot', express.text({ type: 'application/sdp' }));
+app.use('/robot', createProxyMiddleware({
+  target: MEDIAMTX_WHEP,
+  changeOrigin: true,
+  xfwd: true,
+  onProxyReq: (proxyReq, req) => {
+    if (typeof req.body === 'string') {
+      const len = Buffer.byteLength(req.body);
+      proxyReq.setHeader('Content-Length', String(len));
+      proxyReq.removeHeader('content-length');
+      proxyReq.write(req.body);
+    }
+  }
+}));
 
 // Quiet favicon noise
 app.get('/favicon.ico', (req, res) => res.status(204).end());
