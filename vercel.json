@@ -8,7 +8,10 @@
     },
     {
       "src": "cam-web/ptz-proxy/server.js",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 30
+      }
     }
   ],
   "routes": [
@@ -28,10 +31,5 @@
       "src": "/(.*)",
       "dest": "/cam-web/web/index.html"
     }
-  ],
-  "functions": {
-    "cam-web/ptz-proxy/server.js": {
-      "maxDuration": 30
-    }
-  }
+  ]
 }
