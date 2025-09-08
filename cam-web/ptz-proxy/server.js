@@ -17,6 +17,20 @@ app.use(express.json());
 // Accept raw SDP for WHEP endpoints
 app.use('/whep', express.text({ type: 'application/sdp' }));
 
+// Detect vercel runtime and optional remote PTZ base (your Cloudflare tunnel)
+const IS_VERCEL = !!process.env.VERCEL;
+const PTZ_REMOTE_BASE = process.env.PTZ_REMOTE_BASE;
+
+// On Vercel, proxy PTZ API to a remote base (e.g., your local Express via Cloudflare)
+if (IS_VERCEL && PTZ_REMOTE_BASE) {
+  console.log(`[PTZ] Running on Vercel; proxying /api/ptz to ${PTZ_REMOTE_BASE}`);
+  app.use('/api/ptz', createProxyMiddleware({
+    target: PTZ_REMOTE_BASE,
+    changeOrigin: true,
+    xfwd: true,
+  }));
+}
+
 const CAM_USER = process.env.CAM_USER;
 const CAM_PASS = process.env.CAM_PASS;
 const ROBOT_CAM_IP = process.env.ROBOT_CAM_IP || '192.168.4.181';
@@ -354,12 +368,70 @@ app.post('/ceiling/whep', async (req, res) => {
   }
 });
 
+// Rewrite master playlist to strip alternate audio (stability over Quick Tunnels)
+// GET /hls/:name/index.m3u8 -> fetch from MediaMTX and remove #EXT-X-MEDIA audio lines and AUDIO="..." attributes
+app.get('/hls/:name/index.m3u8', async (req, res) => {
+  try {
+    const name = req.params.name;
+    const target = `${MEDIAMTX_HTTP}/${encodeURIComponent(name)}/index.m3u8`;
+    const r = await fetch(target);
+    const txt = await r.text();
+    if (!r.ok) {
+      res.status(r.status).send(txt);
+      return;
+    }
+    const rewritten = txt
+      .split('\n')
+      .filter((line) => !/^#EXT-X-MEDIA:TYPE=AUDIO/i.test(line))
+      .map((line) => {
+        if (/^#EXT-X-STREAM-INF:/i.test(line)) {
+          return line.replace(/,?AUDIO="[^"]*"/i, '');
+        }
+        return line;
+      })
+      .join('\n');
+    res.set('Content-Type', 'application/vnd.apple.mpegurl');
+    res.set('Cache-Control', 'no-store');
+    res.set('Access-Control-Allow-Origin', '*');
+    res.send(rewritten);
+  } catch (e) {
+    res.status(502).send('bad gateway');
+  }
+});
+
 // MediaMTX HLS in current release serves at /<path>/index.m3u8 (no /hls prefix)
+// Support dynamic base via ?base=... or X-Stream-Base header so we don't need to redeploy when tunnel rotates
 app.use('/hls', createProxyMiddleware({
-  target: MEDIAMTX_HTTP,
   changeOrigin: true,
   xfwd: true,
+  router: (req) => {
+    // In local/dev, always hit local MediaMTX directly to avoid double-tunneling (stalls after first frame)
+    if (!IS_VERCEL) {
+      return MEDIAMTX_HTTP;
+    }
+    try {
+      const url = new URL(req.url, 'http://local');
+      const qBase = url.searchParams.get('base');
+      const headerBase = (req.headers['x-stream-base'] || '').toString();
+      const chosen = (qBase && /^https?:\/\//.test(qBase)) ? qBase : (headerBase && /^https?:\/\//.test(headerBase) ? headerBase : MEDIAMTX_HTTP);
+      return chosen;
+    } catch (e) {
+      return MEDIAMTX_HTTP;
+    }
+  },
   pathRewrite: (path) => path.replace(/^\/hls\//, '/'),
+  onProxyReq: (proxyReq, req) => {
+    // Ensure CF doesn't buffer/transform; keep connection streaming
+    proxyReq.setHeader('Cache-Control', 'no-store');
+    proxyReq.setHeader('Connection', 'keep-alive');
+  },
+  onProxyRes: (proxyRes) => {
+    // Propagate streaming-friendly headers
+    try {
+      proxyRes.headers['Cache-Control'] = 'no-store';
+      proxyRes.headers['Access-Control-Allow-Origin'] = '*';
+    } catch (_) {}
+  }
 }));
 
 // Proxy /robot/* to MediaMTX WHEP server (so /robot/whep works)
@@ -385,5 +457,8 @@ app.get('/favicon.ico', (req, res) => res.status(204).end());
 app.use('/', express.static(new URL('../web', import.meta.url).pathname));
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3100;
-app.listen(PORT, () => console.log(`Dev server listening on http://localhost:${PORT}`));
+if (!IS_VERCEL) {
+  app.listen(PORT, () => console.log(`Dev server listening on http://localhost:${PORT}`));
+}
 
+export default app;

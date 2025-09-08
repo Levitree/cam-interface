@@ -43,3 +43,4 @@ curl -s --max-time 5 "http://100.126.251.43:5541" && echo "✅ Robot camera prox
 echo ""
 echo "✅ VPS MediaMTX updated with camera sources!"
 echo "🌐 Test: http://165.227.7.229:8888"
+

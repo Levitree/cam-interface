@@ -85,3 +85,4 @@ MEDIAMTX_WHEP=https://YOUR_VPS_IP:8889
 
 **Cost: ~$6/month for VPS hosting**
 **Setup time: ~30 minutes**
+

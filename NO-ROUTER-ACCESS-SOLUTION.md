@@ -57,3 +57,4 @@ MEDIAMTX_WHEP=https://YOUR_VPS_IP:8889
 - **DigitalOcean VPS**: $6/month
 
 This approach creates a secure tunnel between your cameras and the cloud without exposing anything publicly!
+

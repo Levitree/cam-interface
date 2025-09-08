@@ -47,3 +47,4 @@ Your local setup is rock-solid. Deploy the frontend to Vercel first, then decide
 - ✅ Hold-to-move controls working
 
 **Ready for Vercel deployment!** 🎉
+

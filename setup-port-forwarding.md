@@ -48,3 +48,4 @@ MEDIAMTX_WHEP=https://YOUR_VPS_IP:8889
 - Change default camera passwords
 - Consider VPN instead for better security
 - Monitor access logs
+

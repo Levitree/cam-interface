@@ -4,6 +4,8 @@
   <meta charset="utf-8" />
   <title>Triple Camera Control</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mux-embed@latest/dist/mux.js"></script>
   <style>
     body { 
       margin: 0; 
@@ -266,6 +268,95 @@
     }
   </style>
   <script>
+    // HLS playback helper (uses native on Safari, hls.js elsewhere)
+    window.hlsPlayers = window.hlsPlayers || {};
+    // Default Mux playback URLs (off-WiFi friendly). Override via query/localStorage if needed.
+    const defaultMux = {
+      robot: 'https://stream.mux.com/5htbrAg00zNc6tREnj8vKgvNPYrfB4p301qVFYGF185K8.m3u8',
+      table: 'https://stream.mux.com/nPsSEbVimwUZp9L00zjnqi5yakdKoGIM5ckP7Z02EAfws.m3u8',
+      ceiling: 'https://stream.mux.com/N1kmG5Ukd2jRgmPlHcKWbuHDdYUnPVkNmPYOdKD2CM00.m3u8'
+    };
+    function playHLS(videoEl, hlsUrl, cameraName) {
+      try {
+        updateStatus(cameraName, 'Connecting...', '');
+        if (window.hlsPlayers[cameraName]) {
+          try { window.hlsPlayers[cameraName].destroy(); } catch (e) {}
+          delete window.hlsPlayers[cameraName];
+        }
+        if (videoEl.srcObject) {
+          videoEl.srcObject.getTracks().forEach(t => t.stop());
+          videoEl.srcObject = null;
+        }
+        if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {
+          videoEl.src = hlsUrl;
+          videoEl.onloadedmetadata = () => {
+            videoEl.play().catch(() => {});
+            videoEl.classList.remove('hidden');
+            hideNoStream(cameraName);
+            updateStatus(cameraName, 'Connected', 'connected');
+          };
+          videoEl.onerror = () => {
+            showNoStream(cameraName);
+            updateStatus(cameraName, 'Error', 'error');
+          };
+          if (window.mux) {
+            mux.monitor(videoEl, { debug: false, data: { env_key: 'b7fc70t3q8jg1gfm07ge7ipvs', player_name: 'HTML5', video_title: cameraName } });
+          }
+        } else if (window.Hls && window.Hls.isSupported()) {
+          const hls = new window.Hls({
+            lowLatencyMode: false,
+            enableWorker: true,
+            backBufferLength: 30,
+            liveSyncDurationCount: 1,
+            liveMaxLatencyDurationCount: 4,
+            fragLoadingTimeOut: 15000,
+            manifestLoadingTimeOut: 15000,
+            levelLoadingTimeOut: 15000,
+            audioTrackLoadingTimeOut: 15000,
+            maxStarvationDelay: 2,
+            maxBufferLength: 10,
+            maxBufferSize: 30*1000*1000,
+            maxBufferHole: 0.5
+          });
+          window.hlsPlayers[cameraName] = hls;
+          hls.on(window.Hls.Events.ERROR, (evt, data) => {
+            console.warn(`[HLS ${cameraName}]`, data?.type, data?.details);
+            const fatal = data?.fatal;
+            if (fatal) {
+              switch (data.type) {
+                case 'networkError':
+                  hls.startLoad();
+                  break;
+                case 'mediaError':
+                  hls.recoverMediaError();
+                  break;
+                default:
+                  hls.destroy();
+              }
+            }
+          });
+          hls.loadSource(hlsUrl);
+          hls.attachMedia(videoEl);
+          if (window.mux) {
+            mux.monitor(videoEl, { debug: false, data: { env_key: 'b7fc70t3q8jg1gfm07ge7ipvs', player_name: 'HLS.js', video_title: cameraName } }, { hlsjs: hls });
+          }
+          hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
+            videoEl.play().catch(() => {});
+            videoEl.classList.remove('hidden');
+            hideNoStream(cameraName);
+            updateStatus(cameraName, 'Connected', 'connected');
+          });
+        } else {
+          console.warn('HLS not supported');
+          showNoStream(cameraName);
+          updateStatus(cameraName, 'Unsupported', 'error');
+        }
+      } catch (e) {
+        showNoStream(cameraName);
+        updateStatus(cameraName, 'Error', 'error');
+      }
+    }
+
     // WebRTC WHEP connection
     async function playWHEP(videoEl, whepUrl, cameraName) {
       console.log(`Starting WHEP connection for ${cameraName}:`, whepUrl);
@@ -436,19 +527,17 @@
         video.srcObject.getTracks().forEach(track => track.stop());
         video.srcObject = null;
       }
+      if (window.hlsPlayers[camera]) {
+        try { window.hlsPlayers[camera].destroy(); } catch (e) {}
+        delete window.hlsPlayers[camera];
+      }
       
       showNoStream(camera);
       
       // Restart stream
       setTimeout(() => {
-        const HOST = (window.PUBLIC_HOST && window.PUBLIC_HOST.length) ? window.PUBLIC_HOST : location.host;
-        const base = `${location.protocol}//${HOST}`;
-        
-        playWHEP(video, `${base}/${camera}/whep`, camera).then(() => {
-          // Success handled in playWHEP
-        }).catch(() => {
-          updateStatus(camera, 'Reload Failed', 'error');
-        });
+        const url = `/hls/${camera}/index.m3u8`;
+        playHLS(video, url, camera);
       }, 1000);
     }
     
@@ -525,18 +614,33 @@
       showNoStream('table');
       showNoStream('ceiling');
       
-      // Start all three video streams
-      playWHEP(document.getElementById('vRobot'), `${base}/robot/whep`, 'robot').catch(() => {
-        updateStatus('robot', 'Connection Failed', 'error');
-      });
-      
-      playWHEP(document.getElementById('vTable'), `${base}/table/whep`, 'table').catch(() => {
-        updateStatus('table', 'Connection Failed', 'error');
-      });
-      
-      playWHEP(document.getElementById('vCeiling'), `${base}/ceiling/whep`, 'ceiling').catch(() => {
-        updateStatus('ceiling', 'Connection Failed', 'error');
-      });
+      // Accept per-camera URLs or a single base
+      // ?robot=https://...m3u8&table=https://...m3u8 or ?base=https://...
+      let storedBase = '';
+      try {
+        const u = new URL(window.location.href);
+        const qRobot = u.searchParams.get('robot');
+        const qTable = u.searchParams.get('table');
+        const qCeiling = u.searchParams.get('ceiling');
+        const qBase = u.searchParams.get('base');
+        const isTryCF = /trycloudflare\.com$/i.test(u.hostname);
+        if (qRobot) localStorage.setItem('url_robot', qRobot);
+        if (qTable) localStorage.setItem('url_table', qTable);
+        if (qCeiling) localStorage.setItem('url_ceiling', qCeiling);
+        if (qBase && !isTryCF) localStorage.setItem('hls_base', qBase);
+        if (!isTryCF) storedBase = localStorage.getItem('hls_base') || '';
+      } catch (e) {}
+      const robotStored = localStorage.getItem('url_robot');
+      const tableStored = localStorage.getItem('url_table');
+      const ceilingStored = localStorage.getItem('url_ceiling');
+      const robotUrl = robotStored || (storedBase ? `${storedBase}/robot/index.m3u8` : defaultMux.robot) || `/hls/robot/index.m3u8`;
+      const tableUrl = tableStored || (storedBase ? `${storedBase}/table/index.m3u8` : defaultMux.table) || `/hls/table/index.m3u8`;
+      const ceilingUrl = ceilingStored || (storedBase ? `${storedBase}/ceiling/index.m3u8` : defaultMux.ceiling) || `/hls/ceiling/index.m3u8`;
+
+      // Start all three video streams (prefer direct base if provided)
+      playHLS(document.getElementById('vRobot'), robotUrl , 'robot');
+      playHLS(document.getElementById('vTable'), tableUrl , 'table');
+      playHLS(document.getElementById('vCeiling'), ceilingUrl , 'ceiling');
       
       // Setup controls for all three cameras
       setupCameraControls('robot');

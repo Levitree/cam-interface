@@ -68,3 +68,4 @@ echo "- If all ports are open: Camera proxy working ✅"
 echo "- If HTTP endpoints work: PTZ commands will work ✅" 
 echo "- If RTSP endpoints work: Video streams will work ✅"
 echo "- Check MediaMTX logs for any remaining issues"
+

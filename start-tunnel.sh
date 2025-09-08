@@ -56,3 +56,4 @@ done
 # Keep tunnel running
 echo "Tunnel running (PID: $TUNNEL_PID). Press Ctrl+C to stop."
 wait $TUNNEL_PID
+

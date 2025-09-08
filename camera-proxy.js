@@ -45,3 +45,4 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`Camera proxy listening on port ${PORT}`);
   console.log('VPS can now access cameras via Tailscale IP');
 });
+

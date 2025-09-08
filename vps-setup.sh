@@ -80,3 +80,4 @@ echo "MEDIAMTX_WHEP=https://$(curl -s ifconfig.me):8889"
 echo "ROBOT_CAM_IP=100.126.251.43"
 echo "TABLE_CAM_IP=100.126.251.43" 
 echo "CEILING_CAM_IP=100.126.251.43"
+

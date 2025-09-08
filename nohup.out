@@ -1,0 +1,4 @@
+[in#0 @ 0x7f78a7c065c0] Error opening input: Invalid data found when processing input
+Error opening input file rtsp://admin:Password@192.168.4.181:554/cam/realmonitor?channel=1&subtype=0.
+Error opening input files: Invalid data found when processing input
+Exiting normally, received signal 15.

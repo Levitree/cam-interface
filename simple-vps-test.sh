@@ -52,3 +52,4 @@ echo ""
 echo "🎯 Summary:"
 echo "If cameras are reachable directly, the issue is with the proxy setup on your Mac"
 echo "If MediaMTX is responding, the VPS side is working correctly"
+

@@ -109,3 +109,4 @@ echo "MEDIAMTX_HTTP=https://165.227.7.229:8888"
 echo "MEDIAMTX_WHEP=https://165.227.7.229:8889"
 echo ""
 echo "🌐 Test your setup: https://165.227.7.229:8888"
+

@@ -50,3 +50,4 @@ echo "systemctl restart mediamtx"
 echo ""
 echo "Press Ctrl+C to stop proxy when done"
 wait
+

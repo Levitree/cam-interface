@@ -1,0 +1,12 @@
+paths:
+  robot:
+    source: rtsp://admin:Password@192.168.4.181:554/cam/realmonitor?channel=1&subtype=0
+  table:
+    source: rtsp://admin:Password@192.168.4.182:554/cam/realmonitor?channel=1&subtype=0
+  ceiling:
+    source: rtsp://admin:Password@192.168.4.183:554/cam/realmonitor?channel=1&subtype=0
+
+webrtc: yes
+hls: yes
+webrtcAddress: 0.0.0.0:8889
+hlsAddress: 0.0.0.0:8888

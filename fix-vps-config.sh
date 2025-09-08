@@ -58,3 +58,4 @@ echo "CEILING_CAM_IP=100.126.251.43"
 echo ""
 echo "3. Test Vercel deployment"
 echo "4. We'll add camera sources once basic connectivity is working"
+
